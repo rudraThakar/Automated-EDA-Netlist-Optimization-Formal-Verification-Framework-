@@ -1,0 +1,271 @@
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  height: 100%;
+  font-family: Inter, Arial, sans-serif;
+  background: #0f1115;
+  color: #e8eaed;
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+}
+
+.topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #171a21;
+  border-bottom: 1px solid #2a2f3a;
+  padding: 12px 16px;
+}
+
+.brand {
+  font-weight: 700;
+  font-size: 22px;
+}
+
+.statusbar {
+  display: flex;
+  gap: 16px;
+  font-size: 13px;
+  color: #b8c0cc;
+}
+
+.configbar {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 16px;
+  border-bottom: 1px solid #2a2f3a;
+  background: #13161c;
+  flex-wrap: wrap;
+}
+
+.configbar input[type="text"],
+.configbar input:not([type="checkbox"]) {
+  background: #0f1115;
+  color: #e8eaed;
+  border: 1px solid #2a2f3a;
+  padding: 8px 10px;
+  border-radius: 8px;
+}
+
+button {
+  background: #2d6cdf;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+button:hover {
+  background: #3a78e7;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: 320px 1fr 1fr;
+  gap: 0;
+  flex: 1;
+  min-height: 0;
+}
+
+.pane {
+  border-right: 1px solid #2a2f3a;
+  overflow: auto;
+  min-height: 0;
+}
+
+.left-pane {
+  background: #12151b;
+}
+
+.center-pane,
+.right-pane {
+  background: #0f1115;
+}
+
+.pane-title {
+  position: sticky;
+  top: 0;
+  background: #171a21;
+  padding: 12px 16px;
+  border-bottom: 1px solid #2a2f3a;
+  font-weight: 600;
+  z-index: 2;
+}
+
+#timeline {
+  padding: 12px;
+}
+
+.timeline-card {
+  border: 1px solid #2a2f3a;
+  background: #161a22;
+  border-radius: 12px;
+  padding: 12px;
+  margin-bottom: 10px;
+  cursor: pointer;
+  transition: 0.15s ease;
+}
+
+.timeline-card:hover {
+  border-color: #3d4556;
+}
+
+.timeline-card.selected {
+  border-color: #2d6cdf;
+  box-shadow: 0 0 0 1px #2d6cdf inset;
+}
+
+.timeline-header {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.req-index {
+  font-weight: 600;
+}
+
+.badge {
+  font-size: 11px;
+  padding: 3px 7px;
+  border-radius: 999px;
+  text-transform: uppercase;
+}
+
+.badge.success {
+  background: #1d5f3a;
+}
+
+.badge.warning {
+  background: #7a5c11;
+}
+
+.badge.error {
+  background: #7a2323;
+}
+
+.timeline-request {
+  font-size: 14px;
+  color: #e8eaed;
+  margin-bottom: 6px;
+  line-height: 1.35;
+}
+
+.timeline-sub {
+  font-size: 12px;
+  color: #a9b4c2;
+}
+
+.details-tabs {
+  display: flex;
+  gap: 8px;
+  padding: 12px 16px;
+  border-bottom: 1px solid #2a2f3a;
+  background: #12151b;
+  position: sticky;
+  top: 49px;
+  z-index: 1;
+  flex-wrap: wrap;
+}
+
+.tab-btn {
+  background: #202531;
+  color: #dbe3ee;
+}
+
+.tab-btn.active {
+  background: #2d6cdf;
+}
+
+.detail-content {
+  padding: 16px;
+}
+
+pre {
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: #11151d;
+  border: 1px solid #2a2f3a;
+  border-radius: 10px;
+  padding: 12px;
+  overflow: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.inputbar {
+  display: grid;
+  grid-template-columns: 1fr 180px;
+  gap: 12px;
+  padding: 12px 16px;
+  border-top: 1px solid #2a2f3a;
+  background: #13161c;
+  min-height: 100px;
+}
+
+#requestInput {
+  width: 100%;
+  height: 72px;
+  resize: none;
+  background: #0f1115;
+  color: #e8eaed;
+  border: 1px solid #2a2f3a;
+  border-radius: 10px;
+  padding: 12px;
+  font-size: 14px;
+}
+
+.empty {
+  color: #98a4b3;
+  font-style: italic;
+}
+
+.file-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 0;
+  border-bottom: 1px solid #222836;
+}
+
+.graph-placeholder {
+  display: flex;
+  min-height: 340px;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  border: 1px dashed #394152;
+  border-radius: 12px;
+  background: #121722;
+  margin: 16px;
+  text-align: center;
+  padding: 24px;
+}
+
+.graph-title {
+  font-size: 18px;
+  margin-bottom: 10px;
+}
+
+.wip {
+  font-size: 24px;
+  font-weight: 700;
+  color: #f0b429;
+}
+
+.wip-sub {
+  margin-top: 8px;
+  color: #9aa6b2;
+  max-width: 440px;
+}

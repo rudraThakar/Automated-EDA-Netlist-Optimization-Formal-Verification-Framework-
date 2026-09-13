@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ICCAD 2026 UI</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div class="topbar">
+    <div class="brand">ICCAD 2026 Problem A UI</div>
+    <div class="statusbar">
+      <span id="plannerStatus">Planner: -</span>
+      <span id="caseStatus">Case: -</span>
+      <span id="designStatus">Design: -</span>
+    </div>
+  </div>
+
+  <div class="configbar">
+    <input id="configPath" value="config.yaml" />
+    <label><input type="checkbox" id="noLlm" /> No LLM</label>
+    <label><input type="checkbox" id="requireLlm" checked /> Require LLM</label>
+    <label><input type="checkbox" id="debugMode" checked /> Debug</label>
+    <button id="configureBtn">Configure</button>
+    <button id="resetBtn">Reset</button>
+  </div>
+
+  <div class="layout">
+    <aside class="pane left-pane">
+      <div class="pane-title">Execution Timeline</div>
+      <div id="timeline"></div>
+    </aside>
+
+    <main class="pane center-pane">
+      <div class="pane-title">Step Details</div>
+      <div class="details-tabs">
+        <button class="tab-btn active" data-tab="summary">Summary</button>
+        <button class="tab-btn" data-tab="planner">Planner</button>
+        <button class="tab-btn" data-tab="validated">Validated Tool</button>
+        <button class="tab-btn" data-tab="output">Tool Output</button>
+        <button class="tab-btn" data-tab="errors">Errors</button>
+        <button class="tab-btn" data-tab="files">Files</button>
+      </div>
+      <div id="detailContent" class="detail-content"></div>
+    </main>
+
+    <section class="pane right-pane">
+      <div class="pane-title">Design View</div>
+      <div class="details-tabs">
+        <button class="tab-btn active" data-design-tab="verilog">Verilog</button>
+        <button class="tab-btn" data-design-tab="graph">Graph</button>
+      </div>
+      <div id="designContent" class="detail-content"></div>
+    </section>
+  </div>
+
+  <div class="inputbar">
+    <textarea id="requestInput" placeholder="Enter the next natural-language request..."></textarea>
+    <button id="sendBtn">Run Request</button>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>
