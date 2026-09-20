@@ -44,11 +44,16 @@ class TransactionLogger:
 
 
 class ICCADApp:
-    def __init__(self, planner: Optional[BasePlanner] = None, debug: bool = False) -> None:
+    def __init__(
+        self,
+        planner: Optional[BasePlanner] = None,
+        debug: bool = False,
+        verification_policy: str = "permissive",
+    ) -> None:
         self.case_logger = CaseLogger()
         self.protocol = ProtocolManager(self.case_logger)
         self.validator = ToolCallValidator(STRICT_TOOL_SCHEMA)
-        self.engine = DeterministicEDAEngine()
+        self.engine = DeterministicEDAEngine(verification_policy=verification_policy)
         self.planner = planner if planner is not None else HeuristicBootstrapPlanner()
         self.txlog = TransactionLogger()
         self.case_name: Optional[str] = None
@@ -134,6 +139,7 @@ class ICCADApp:
             self.txlog.log_event("validation_failed", {"error": validation.error, "clarification": validation.clarification})
             self.debug_print(f"[VALIDATION FAILED] {validation.error}")
 
+            self.results.clear_execution_artifacts()
             self.results.save_validation_error(
                 {
                     "error": validation.error,
@@ -226,6 +232,11 @@ class ICCADApp:
                 call.arguments["to_gate"],
                 call.arguments.get("pattern")
             )
+        if call.tool == ToolName.CLEAN_DANGLING_AND_WRITE:
+            return self.engine.clean_dangling_and_write(
+                call.arguments["input_path"],
+                call.arguments["output_path"],
+            )
         raise ValidationError(f"Unsupported validated tool call: {call.tool.value}")
 
     def run_stdin_loop(self) -> None:
@@ -241,7 +252,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         no_llm=args.no_llm,
         require_llm=args.require_llm,
     )
-    app = ICCADApp(planner=planner, debug=args.debug)
+    verification_policy = args.verification_policy or str(config.get("verification_policy", "permissive"))
+    app = ICCADApp(planner=planner, debug=args.debug, verification_policy=verification_policy)
     app.run_stdin_loop()
     return 0
 

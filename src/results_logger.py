@@ -57,3 +57,14 @@ class ResultsLogger:
             path = self.results_dir / name
             if path.exists():
                 path.unlink()
+
+    def clear_execution_artifacts(self) -> None:
+        for name in [
+            "latest_validated_tool.json",
+            "latest_tool_output_summary.txt",
+            "latest_tool_output_data.json",
+            "latest_execution_error.json",
+        ]:
+            path = self.results_dir / name
+            if path.exists():
+                path.unlink()

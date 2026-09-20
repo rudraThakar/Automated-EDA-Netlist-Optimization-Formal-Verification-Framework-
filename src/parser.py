@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from ir import NetlistError, NetlistIR
 
@@ -174,6 +175,7 @@ class GateLevelVerilogParser:
             parts = re.split(r"\s*&\s*", inner_expr, maxsplit=1)
             if len(parts) == 2:
                 in1, in2 = parts[0].strip(), parts[1].strip()
+                self._require_identifier_operands(expr, in1, in2)
                 if negated:
                     gate_type = "nand"
                 else:
@@ -189,6 +191,7 @@ class GateLevelVerilogParser:
             parts = re.split(r"\s*\|\s*", inner_expr, maxsplit=1)
             if len(parts) == 2:
                 in1, in2 = parts[0].strip(), parts[1].strip()
+                self._require_identifier_operands(expr, in1, in2)
                 if negated:
                     gate_type = "nor"
                 else:
@@ -204,6 +207,7 @@ class GateLevelVerilogParser:
             parts = re.split(r"\s*\^\s*", inner_expr, maxsplit=1)
             if len(parts) == 2:
                 in1, in2 = parts[0].strip(), parts[1].strip()
+                self._require_identifier_operands(expr, in1, in2)
                 if negated:
                     gate_type = "xnor"
                 else:
@@ -215,10 +219,16 @@ class GateLevelVerilogParser:
                 return
         
         # If we reach here, the expression is complex or unsupported
-        # For now, create a wire assignment (best effort)
         if self._is_single_identifier(inner_expr):
             inst_name = f"buf_assign_{counter}"
             ir.add_gate("buf", inst_name, output_net, [inner_expr])
+            return
+
+        raise NetlistError(f"Unsupported assign expression: {expr}")
+
+    def _require_identifier_operands(self, expr: str, *operands: str) -> None:
+        if not all(self._is_single_identifier(operand) for operand in operands):
+            raise NetlistError(f"Unsupported assign expression: {expr}")
 
 
 
@@ -254,3 +264,185 @@ class GateLevelVerilogWriter:
 
         lines.append("endmodule")
         return "\n".join(lines) + "\n"
+
+
+class YosysJsonNetlistParser:
+    """Convert a Yosys netlist JSON export into the project's flat NetlistIR.
+
+    The adapter intentionally handles the same core single-bit gate vocabulary as
+    the rest of the engine. Yosys is used as the robust Verilog frontend; this
+    class keeps the downstream IR deterministic and explicit.
+    """
+
+    CELL_TYPE_MAP = {
+        "$and": "and",
+        "$or": "or",
+        "$nand": "nand",
+        "$nor": "nor",
+        "$xor": "xor",
+        "$xnor": "xnor",
+        "$not": "not",
+        "$buf": "buf",
+        "$pos": "buf",
+        "$dff": "dff",
+        "$_AND_": "and",
+        "$_OR_": "or",
+        "$_NAND_": "nand",
+        "$_NOR_": "nor",
+        "$_XOR_": "xor",
+        "$_XNOR_": "xnor",
+        "$_NOT_": "not",
+        "$_BUF_": "buf",
+        "$_DFF_P_": "dff",
+        "$_DFF_N_": "dff",
+        "and": "and",
+        "or": "or",
+        "nand": "nand",
+        "nor": "nor",
+        "xor": "xor",
+        "xnor": "xnor",
+        "not": "not",
+        "buf": "buf",
+        "dff": "dff",
+    }
+    INPUT_PORTS = ("A", "B", "D")
+    OUTPUT_PORTS = ("Y", "Q")
+
+    def parse_file(self, path: str, loaded_path: Optional[str] = None) -> NetlistIR:
+        data = json.loads(Path(path).read_text(encoding="utf-8"))
+        return self.parse_data(data, loaded_path=loaded_path)
+
+    def parse_data(self, data: Dict[str, Any], loaded_path: Optional[str] = None) -> NetlistIR:
+        modules = data.get("modules")
+        if not isinstance(modules, dict) or not modules:
+            raise NetlistError("Yosys JSON does not contain any modules.")
+
+        module_name, module = self._select_module(modules)
+        if not isinstance(module, dict):
+            raise NetlistError(f"Yosys JSON module '{module_name}' is malformed.")
+
+        ir = NetlistIR()
+        ir.module_name = module_name
+        ir.loaded_path = loaded_path
+
+        bit_names = self._build_bit_name_map(module)
+
+        for port_name, port in module.get("ports", {}).items():
+            direction = port.get("direction")
+            for bit_name in self._bits_to_names(port.get("bits", []), bit_names):
+                if direction == "input":
+                    ir.add_input(bit_name)
+                elif direction == "output":
+                    ir.add_output(bit_name)
+
+        for net_name in bit_names.values():
+            ir.ensure_net(net_name)
+
+        for cell_name, cell in module.get("cells", {}).items():
+            gate_type = self.CELL_TYPE_MAP.get(cell.get("type"))
+            if gate_type is None:
+                raise NetlistError(f"Unsupported Yosys cell type '{cell.get('type')}' in cell '{cell_name}'.")
+
+            connections = cell.get("connections", {})
+            output_net = self._first_existing_port(connections, self.OUTPUT_PORTS, bit_names)
+            input_nets = [
+                self._single_bit_name(connections[port], bit_names)
+                for port in self.INPUT_PORTS
+                if port in connections
+            ]
+
+            if output_net is None:
+                raise NetlistError(f"Yosys cell '{cell_name}' has no supported output port.")
+            if gate_type in {"and", "or", "nand", "nor", "xor", "xnor"} and len(input_nets) != 2:
+                raise NetlistError(f"Yosys cell '{cell_name}' must have exactly two inputs.")
+            if gate_type in {"buf", "not"} and len(input_nets) != 1:
+                raise NetlistError(f"Yosys cell '{cell_name}' must have exactly one input.")
+            if gate_type == "dff" and len(input_nets) < 1:
+                raise NetlistError(f"Yosys DFF cell '{cell_name}' must have a data input.")
+
+            for input_net in input_nets:
+                if input_net.startswith("1'b"):
+                    ir.ensure_net(input_net).is_const = True
+            ir.add_gate(gate_type, self._sanitize_instance_name(cell_name), output_net, input_nets)
+
+        ir.validate_basic()
+        return ir
+
+    def _select_module(self, modules: Dict[str, Any]) -> tuple[str, Dict[str, Any]]:
+        for name, module in modules.items():
+            attrs = module.get("attributes", {}) if isinstance(module, dict) else {}
+            if attrs.get("top", "").endswith("1"):
+                return name, module
+        if len(modules) == 1:
+            name = next(iter(modules))
+            return name, modules[name]
+        raise NetlistError("Yosys JSON contains multiple modules and no unique top module.")
+
+    def _build_bit_name_map(self, module: Dict[str, Any]) -> Dict[str, str]:
+        candidates: Dict[str, List[tuple[int, str]]] = {}
+
+        def add_candidate(bit: Any, name: str, priority: int) -> None:
+            if isinstance(bit, str):
+                candidates.setdefault(bit, []).append((priority, name))
+            elif isinstance(bit, int):
+                candidates.setdefault(str(bit), []).append((priority, name))
+
+        for port_name, port in module.get("ports", {}).items():
+            bits = port.get("bits", [])
+            if len(bits) == 1:
+                add_candidate(bits[0], port_name, 0)
+            else:
+                for index, bit in enumerate(bits):
+                    add_candidate(bit, f"{port_name}_{index}", 0)
+
+        for net_name, net in module.get("netnames", {}).items():
+            bits = net.get("bits", [])
+            hidden = int(net.get("hide_name", 0) or 0)
+            priority = 2 if hidden else 1
+            if len(bits) == 1:
+                add_candidate(bits[0], self._sanitize_net_name(net_name), priority)
+            else:
+                for index, bit in enumerate(bits):
+                    add_candidate(bit, f"{self._sanitize_net_name(net_name)}_{index}", priority)
+
+        bit_names: Dict[str, str] = {}
+        for bit, names in candidates.items():
+            bit_names[bit] = sorted(names, key=lambda item: (item[0], item[1]))[0][1]
+        return bit_names
+
+    def _bits_to_names(self, bits: List[Any], bit_names: Dict[str, str]) -> List[str]:
+        return [self._single_bit_name([bit], bit_names) for bit in bits]
+
+    def _single_bit_name(self, bits: List[Any], bit_names: Dict[str, str]) -> str:
+        if len(bits) != 1:
+            raise NetlistError("Only one-bit cell ports are supported in the current IR.")
+        bit = bits[0]
+        if isinstance(bit, str) and bit in {"0", "1"}:
+            return f"1'b{bit}"
+        key = str(bit)
+        if key not in bit_names:
+            bit_names[key] = f"_yosys_net_{key}"
+        return bit_names[key]
+
+    def _first_existing_port(
+        self,
+        connections: Dict[str, List[Any]],
+        ports: tuple[str, ...],
+        bit_names: Dict[str, str],
+    ) -> Optional[str]:
+        for port in ports:
+            if port in connections:
+                return self._single_bit_name(connections[port], bit_names)
+        return None
+
+    def _sanitize_instance_name(self, name: str) -> str:
+        cleaned = re.sub(r"[^A-Za-z0-9_$]", "_", name)
+        if not re.match(r"^[A-Za-z_]", cleaned):
+            cleaned = f"inst_{cleaned}"
+        return cleaned
+
+    def _sanitize_net_name(self, name: str) -> str:
+        cleaned = re.sub(r"[^A-Za-z0-9_$]", "_", name)
+        if not re.match(r"^[A-Za-z_]", cleaned):
+            cleaned = f"net_{cleaned}"
+        return cleaned

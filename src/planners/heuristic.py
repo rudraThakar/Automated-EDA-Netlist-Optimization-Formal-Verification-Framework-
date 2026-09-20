@@ -14,6 +14,10 @@ WRITE_NETLIST_RE = re.compile(
     r"(?:write|output).*?(?:current\s+design\s+to|design\s+(?:as|to)|netlist\s+(?:as|to)|to|into)\s+[\"'`]?(?P<path>[A-Za-z0-9_\-./\\]+\.v)[\"'`]?(?:[\s.,;]|$)",
     re.IGNORECASE,
 )
+CLEAN_DANGLING_WORKFLOW_RE = re.compile(
+    r"(?:remove|clean).*?dangling\s+logic.*?(?:from\s+(?:the\s+)?design\s+|from\s+|design\s+)[\"'`]?(?P<input>[A-Za-z0-9_\-./\\]+\.v)[\"'`]?.*?(?:create|write|output|save).*?(?:named|as|to|into)\s+[\"'`]?(?P<output>[A-Za-z0-9_\-./\\]+\.v)[\"'`]?",
+    re.IGNORECASE,
+)
 
 
 class HeuristicBootstrapPlanner(BasePlanner):
@@ -21,6 +25,16 @@ class HeuristicBootstrapPlanner(BasePlanner):
 
     def plan(self, user_request: str) -> str:
         req = user_request.strip()
+
+        m = CLEAN_DANGLING_WORKFLOW_RE.search(req)
+        if m:
+            return stable_json_dumps({
+                "tool": "clean_dangling_and_write",
+                "arguments": {
+                    "input_path": m.group("input"),
+                    "output_path": m.group("output"),
+                },
+            })
 
         m = READ_NETLIST_RE.search(req)
         if m:
@@ -31,6 +45,12 @@ class HeuristicBootstrapPlanner(BasePlanner):
             return stable_json_dumps({"tool": "write_netlist", "arguments": {"path": m.group("path")}})
 
         low = req.lower()
+        if "external" in low and ("tool" in low or "tools" in low):
+            return stable_json_dumps({"tool": "check_external_tools", "arguments": {}})
+
+        if "dangling" in low and ("remove" in low or "clean" in low):
+            return stable_json_dumps({"tool": "remove_dangling_logic", "arguments": {}})
+
         if "fanout" in low:
             # Check for "check max fanout" first
             if "check" in low and "max" in low:

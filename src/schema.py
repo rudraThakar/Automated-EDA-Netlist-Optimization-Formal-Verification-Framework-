@@ -25,6 +25,7 @@ class ToolName(str, Enum):
     INSERT_AND_BEFORE_BUFFERS = "insert_and_before_buffers"
     OPTIMIZE_CONE = "optimize_cone"
     REPLACE_GATES = "replace_gates"
+    CLEAN_DANGLING_AND_WRITE = "clean_dangling_and_write"
 
 
 STRICT_TOOL_SCHEMA: Dict[str, Any] = {
@@ -117,6 +118,14 @@ STRICT_TOOL_SCHEMA: Dict[str, Any] = {
                 "from_gate": {"type": "string", "minLength": 1},
                 "to_gate": {"type": "string", "minLength": 1},
                 "pattern": {"type": "string"},
+            },
+        },
+        "clean_dangling_and_write": {
+            "required": ["input_path", "output_path"],
+            "additionalProperties": False,
+            "properties": {
+                "input_path": {"type": "string", "minLength": 1},
+                "output_path": {"type": "string", "minLength": 1},
             },
         },
     },

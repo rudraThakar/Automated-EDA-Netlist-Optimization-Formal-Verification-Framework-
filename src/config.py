@@ -9,6 +9,7 @@ from typing import Any, Dict, Optional, Sequence
 from planners.base import BasePlanner
 from planners.gemini import GeminiPlanner
 from planners.heuristic import HeuristicBootstrapPlanner
+from planners.nvidia import NvidiaPlanner
 from schema import STRICT_TOOL_SCHEMA
 
 
@@ -26,10 +27,17 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         action="store_true",
         help="Fail loudly instead of falling back to the heuristic planner when LLM setup/call fails",
     )
+    parser.add_argument(
+        "--verification-policy",
+        choices=["strict", "permissive", "dry_run"],
+        default=None,
+        help="Transformation commit policy: strict requires proven equivalence, permissive allows inconclusive checks, dry_run never commits edits",
+    )
     return parser.parse_args(argv)
 
 
 def load_config(path: Optional[str]) -> Dict[str, Any]:
+    load_dotenv()
     if not path:
         return {"provider": "heuristic"}
     cfg_path = Path(path)
@@ -39,6 +47,23 @@ def load_config(path: Optional[str]) -> Dict[str, Any]:
     if cfg_path.suffix.lower() == ".json":
         return json.loads(text)
     return _parse_simple_yaml(text)
+
+
+def load_dotenv(path: str = ".env") -> None:
+    """Load simple KEY=VALUE entries from a local .env file without overriding env vars."""
+    env_path = Path(path)
+    if not env_path.exists():
+        return
+
+    for raw_line in env_path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip().strip('"').strip("'")
+        if key and key not in os.environ:
+            os.environ[key] = value
 
 
 def make_planner_from_config(
@@ -65,6 +90,24 @@ def make_planner_from_config(
         return GeminiPlanner(
             api_key=api_key,
             model=model,
+            schema=STRICT_TOOL_SCHEMA,
+            temperature=temperature,
+            max_output_tokens=max_output_tokens,
+            timeout_sec=timeout_sec,
+            fallback=None if require_llm else fallback,
+        )
+
+    if provider == "nvidia":
+        nvidia = config.get("nvidia", {}) if isinstance(config.get("nvidia", {}), dict) else {}
+        api_key = str(nvidia.get("api_key") or os.environ.get("NVIDIA_API_KEY", ""))
+        model = str(nvidia.get("model", "nvidia/nemotron-3-super-120b-a12b"))
+        base_url = str(nvidia.get("base_url", "https://integrate.api.nvidia.com/v1"))
+        timeout_sec = int(nvidia.get("timeout_sec", 25))
+
+        return NvidiaPlanner(
+            api_key=api_key,
+            model=model,
+            base_url=base_url,
             schema=STRICT_TOOL_SCHEMA,
             temperature=temperature,
             max_output_tokens=max_output_tokens,

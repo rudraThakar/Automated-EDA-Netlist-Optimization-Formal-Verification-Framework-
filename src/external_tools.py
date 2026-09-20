@@ -75,6 +75,16 @@ class YosysBridge:
         script.extend(["proc", "opt", f"write_blif {output_blif}"])
         return self.runner.run([self.executable, "-p", "; ".join(script)], timeout_sec=60)
 
+    def write_json(self, input_v: str, output_json: str, top: Optional[str] = None) -> ToolRunResult:
+        """Export Yosys's netlist JSON without optimization so frontend parsing preserves intent."""
+        script = [f"read_verilog {input_v}"]
+        if top:
+            script.append(f"hierarchy -check -top {top}")
+        else:
+            script.append("hierarchy -check")
+        script.extend(["proc", f"write_json {output_json}"])
+        return self.runner.run([self.executable, "-p", "; ".join(script)], timeout_sec=60)
+
 
 class ABCBridge:
     def __init__(self, executable: str = "abc", runner: Optional[ExternalToolRunner] = None) -> None:
