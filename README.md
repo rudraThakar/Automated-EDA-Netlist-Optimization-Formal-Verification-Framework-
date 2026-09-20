@@ -2,7 +2,7 @@
 
 VeriFlow is a safety-focused EDA automation framework for gate-level Verilog analysis and transformation. It lets an engineer issue natural-language requests, constrains planner output to validated JSON tool calls, executes those tools through a deterministic backend, and verifies design-changing operations with Yosys/ABC where available.
 
-The project was originally inspired by an ICCAD-style netlist exploration and transformation workflow, but it is now structured as an independent personal project focused on safe LLM-assisted hardware design automation.
+
 
 ```text
 natural language request
@@ -17,6 +17,10 @@ natural language request
 The core design principle is simple:
 
 **LLMs may plan, but deterministic tools must execute and verify.**
+
+![Alt text](images/veriflow1.png)
+![Alt text](images/veriflow2.png)
+![Alt text](images/verilog3.png)
 
 ---
 
