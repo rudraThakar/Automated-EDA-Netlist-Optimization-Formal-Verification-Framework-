@@ -3,27 +3,35 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ICCAD 2026 UI</title>
+  <title>VeriFlow Dashboard</title>
   <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
   <div class="topbar">
-    <div class="brand">ICCAD 2026 Problem A UI</div>
+    <div class="brand">VeriFlow Dashboard</div>
     <div class="statusbar">
       <span id="plannerStatus">Planner: -</span>
       <span id="caseStatus">Case: -</span>
       <span id="designStatus">Design: -</span>
+      <span id="policyStatus">Policy: -</span>
     </div>
   </div>
 
   <div class="configbar">
-    <input id="configPath" value="config.yaml" />
+    <input id="configPath" value="config.yaml" aria-label="Config path" />
+    <select id="verificationPolicy" aria-label="Verification policy">
+      <option value="permissive">permissive</option>
+      <option value="strict">strict</option>
+      <option value="dry_run">dry_run</option>
+    </select>
     <label><input type="checkbox" id="noLlm" /> No LLM</label>
     <label><input type="checkbox" id="requireLlm" checked /> Require LLM</label>
     <label><input type="checkbox" id="debugMode" checked /> Debug</label>
     <button id="configureBtn">Configure</button>
     <button id="resetBtn">Reset</button>
   </div>
+
+  <section class="metrics-strip" id="metricsStrip"></section>
 
   <div class="layout">
     <aside class="pane left-pane">
@@ -34,7 +42,8 @@
     <main class="pane center-pane">
       <div class="pane-title">Step Details</div>
       <div class="details-tabs">
-        <button class="tab-btn active" data-tab="summary">Summary</button>
+        <button class="tab-btn active" data-tab="overview">Overview</button>
+        <button class="tab-btn" data-tab="summary">Protocol</button>
         <button class="tab-btn" data-tab="planner">Planner</button>
         <button class="tab-btn" data-tab="validated">Validated Tool</button>
         <button class="tab-btn" data-tab="output">Tool Output</button>
@@ -49,6 +58,7 @@
       <div class="details-tabs">
         <button class="tab-btn active" data-design-tab="verilog">Verilog</button>
         <button class="tab-btn" data-design-tab="graph">Graph</button>
+        <button class="tab-btn" data-design-tab="metrics">Metrics</button>
       </div>
       <div id="designContent" class="detail-content"></div>
     </section>

@@ -1,10 +1,12 @@
 let state = {
   timeline: [],
   selectedIndex: null,
-  currentTab: "summary",
+  currentTab: "overview",
   currentDesignTab: "verilog",
   verilog: "",
-  graph: { status: "wip", message: "Work in Progress" },
+  graph: { status: "empty", message: "No design loaded.", nodes: [], edges: [] },
+  metrics: {},
+  verificationPolicy: "permissive",
 };
 
 async function api(url, options = {}) {
@@ -25,6 +27,7 @@ async function configureSession() {
     no_llm: document.getElementById("noLlm").checked,
     require_llm: document.getElementById("requireLlm").checked,
     debug: document.getElementById("debugMode").checked,
+    verification_policy: document.getElementById("verificationPolicy").value,
   };
   await api("/api/configure", {
     method: "POST",
@@ -57,11 +60,15 @@ async function refreshState() {
   const data = await api("/api/state");
   state.timeline = data.timeline || [];
   state.verilog = data.verilog || "";
-  state.graph = data.graph || { status: "wip", message: "Work in Progress" };
+  state.graph = data.graph || { status: "empty", message: "No design loaded.", nodes: [], edges: [] };
+  state.metrics = data.metrics || {};
+  state.verificationPolicy = data.verification_policy || "permissive";
 
   document.getElementById("plannerStatus").textContent = `Planner: ${data.planner_class || "-"}`;
   document.getElementById("caseStatus").textContent = `Case: ${data.case_name || "-"}`;
   document.getElementById("designStatus").textContent = `Design: ${data.design_loaded || "-"}`;
+  document.getElementById("policyStatus").textContent = `Policy: ${state.verificationPolicy}`;
+  document.getElementById("verificationPolicy").value = state.verificationPolicy;
 
   if (state.selectedIndex === null && state.timeline.length > 0) {
     state.selectedIndex = state.timeline.length - 1;
@@ -72,8 +79,30 @@ async function refreshState() {
 
 function renderAll() {
   renderTimeline();
+  renderMetricsStrip();
   renderDetail();
   renderDesign();
+}
+
+function renderMetricsStrip() {
+  const root = document.getElementById("metricsStrip");
+  const m = state.metrics || {};
+  const metrics = [
+    ["Module", m.module || "-"],
+    ["Gates", m.instances ?? 0],
+    ["Nets", m.nets ?? 0],
+    ["Inputs", m.inputs ?? 0],
+    ["Outputs", m.outputs ?? 0],
+    ["Max depth", m.max_depth ?? "-"],
+    ["Max fanout", `${m.max_fanout ?? 0}${m.max_fanout_net ? ` @ ${m.max_fanout_net}` : ""}`],
+    ["Last tool", m.last_tool || "-"],
+  ];
+  root.innerHTML = metrics.map(([label, value]) => `
+    <div class="metric-tile">
+      <div class="metric-label">${escapeHtml(label)}</div>
+      <div class="metric-value">${escapeHtml(value)}</div>
+    </div>
+  `).join("");
 }
 
 function renderTimeline() {
@@ -122,6 +151,22 @@ function renderDetail() {
   }
 
   const tab = state.currentTab;
+  if (tab === "overview") {
+    const tool = item.validated_tool || {};
+    const output = item.tool_output_data || {};
+    root.innerHTML = `
+      <div class="overview-grid">
+        ${summaryBlock("Request", item.request_text || "-")}
+        ${summaryBlock("Validated Tool", tool.tool || "-")}
+        ${summaryBlock("Verification", formatEquivalent(output.equivalent))}
+        ${summaryBlock("Frontend", output.frontend || state.metrics.last_frontend || "-")}
+      </div>
+      <h3>Response</h3>
+      <pre>${escapeHtml(item.response || item.tool_output_summary || "")}</pre>
+    `;
+    return;
+  }
+
   if (tab === "summary") {
     root.innerHTML = `
       <pre>${escapeHtml(JSON.stringify({
@@ -198,16 +243,85 @@ async function openFile(name) {
 function renderDesign() {
   const root = document.getElementById("designContent");
   if (state.currentDesignTab === "verilog") {
-    root.innerHTML = `<pre>${escapeHtml(state.verilog || "")}</pre>`;
+    root.innerHTML = state.verilog
+      ? `<pre>${escapeHtml(state.verilog)}</pre>`
+      : `<div class="empty">No design loaded.</div>`;
     return;
   }
-  root.innerHTML = `
-    <div class="graph-placeholder">
-      <div class="graph-title">Graph Viewer</div>
-      <div class="wip">Work in Progress</div>
-      <div class="wip-sub">Will be added after Yosys integration.</div>
+
+  if (state.currentDesignTab === "metrics") {
+    root.innerHTML = `<pre>${escapeHtml(JSON.stringify(state.metrics || {}, null, 2))}</pre>`;
+    return;
+  }
+
+  root.innerHTML = renderGraphSvg(state.graph || {});
+}
+
+function renderGraphSvg(graph) {
+  const nodes = graph.nodes || [];
+  const edges = graph.edges || [];
+  if (!nodes.length) {
+    return `<div class="empty">${escapeHtml(graph.message || "No graph available.")}</div>`;
+  }
+
+  const lane = { input: 80, gate: 270, net: 460, output: 650 };
+  const counters = { input: 0, gate: 0, net: 0, output: 0 };
+  const positions = {};
+  nodes.forEach((node) => {
+    const kind = lane[node.kind] === undefined ? "net" : node.kind;
+    const y = 60 + counters[kind] * 58;
+    counters[kind] += 1;
+    positions[node.id] = { x: lane[kind], y, kind };
+  });
+
+  const height = Math.max(360, 120 + Math.max(...Object.values(counters)) * 58);
+  const edgeMarkup = edges.map((edge) => {
+    const s = positions[edge.source];
+    const t = positions[edge.target];
+    if (!s || !t) return "";
+    const mid = (s.x + t.x) / 2;
+    return `<path class="graph-edge" d="M${s.x + 44},${s.y} C${mid},${s.y} ${mid},${t.y} ${t.x - 44},${t.y}" />`;
+  }).join("");
+
+  const nodeMarkup = nodes.map((node) => {
+    const p = positions[node.id];
+    const label = escapeHtml(node.label || node.id).replaceAll("\\n", " ");
+    return `
+      <g class="graph-node ${escapeHtml(p.kind)}">
+        <rect x="${p.x - 44}" y="${p.y - 18}" width="88" height="36" rx="6" />
+        <text x="${p.x}" y="${p.y + 4}">${label.slice(0, 18)}</text>
+      </g>
+    `;
+  }).join("");
+
+  return `
+    <div class="graph-header">${escapeHtml(graph.message || "")}</div>
+    <svg class="graph-svg" viewBox="0 0 730 ${height}" role="img" aria-label="Netlist graph">
+      <defs>
+        <marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+          <path d="M0,0 L8,4 L0,8 z"></path>
+        </marker>
+      </defs>
+      ${edgeMarkup}
+      ${nodeMarkup}
+    </svg>
+  `;
+}
+
+function summaryBlock(label, value) {
+  return `
+    <div class="summary-block">
+      <div class="metric-label">${escapeHtml(label)}</div>
+      <div class="summary-value">${escapeHtml(value)}</div>
     </div>
   `;
+}
+
+function formatEquivalent(value) {
+  if (value === true) return "proved";
+  if (value === false) return "failed";
+  if (value === null || value === undefined) return "-";
+  return String(value);
 }
 
 function escapeHtml(text) {
