@@ -1,0 +1,18 @@
+provider: "nvidia"
+
+# Verification policy for design-changing operations:
+# - strict: commit only when equivalence is proved
+# - permissive: commit when equivalence is proved or inconclusive, reject failures
+# - dry_run: analyze transformations but never commit design changes
+verification_policy: "permissive"
+
+nvidia:
+  # Leave blank to use the NVIDIA_API_KEY environment variable.
+  api_key: ""
+  base_url: "https://integrate.api.nvidia.com/v1"
+  model: "nvidia/nemotron-3-super-120b-a12b"
+  timeout_sec: 25
+
+generation:
+  temperature: 0.2
+  max_output_tokens: 1024
