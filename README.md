@@ -1,57 +1,87 @@
-# ICCAD 2026 Problem A — Deterministic Phase 2 Scaffold
+# VeriFlow: Verified Natural-Language EDA Automation
 
-This repository contains a **deterministic scaffold** for **ICCAD 2026 Contest Problem A: LLM-Assisted Netlist Exploration and Transformation**.
+VeriFlow is a safety-focused EDA automation framework for gate-level Verilog analysis and transformation. It lets an engineer issue natural-language requests, constrains planner output to validated JSON tool calls, executes those tools through a deterministic backend, and verifies design-changing operations with Yosys/ABC where available.
 
-The project is built around a **constrained JSON tool-calling architecture**:
+The project was originally inspired by an ICCAD-style netlist exploration and transformation workflow, but it is now structured as an independent personal project focused on safe LLM-assisted hardware design automation.
 
-**natural language request → planner → strict JSON tool call → validator → deterministic engine → protocol/log output**
+```text
+natural language request
+        -> planner
+        -> strict JSON tool call
+        -> schema validator
+        -> deterministic EDA engine
+        -> Verilog/Yosys/ABC backend
+        -> protocol, logs, artifacts, and UI output
+```
 
-The current codebase is intentionally a **safe, contest-aligned scaffold**, not a fully complete solver. It already supports the core protocol, config-driven planner selection, restricted gate-level Verilog parsing/writing, several deterministic analysis/transformation tools, and thin Yosys/ABC backend wrappers for future backbone integration.
+The core design principle is simple:
 
----
-
-## Current project status
-
-The repository provides a **complete Phase 2 scaffold** for **ICCAD 2026 Contest Problem A** with full Yosys/ABC backend integration:
-
-- contest-style `#RESPONSE <id>` / `#END <id>` protocol handling
-- testcase-aware logging to `<case_name>.log`
-- strict JSON schema validation for tool calls
-- deterministic backend engine with verification-first transformations
-- restricted gate-level Verilog parser/writer for the contest subset
-- planner abstraction with:
-  - deterministic heuristic planner
-  - Gemini planner adapter for development
-  - heuristic fallback when Gemini is unavailable
-- config-based startup using `-config`
-- debug/result artifacts under `results/`
-- **Yosys integration** for normalization and BLIF export
-- **ABC integration** for optimization and equivalence checking
-- **automatic verification** of all transformations
-- **graceful degradation** when external tools unavailable
-- comprehensive pytest coverage (26 tests passing)
-
-This scaffold is **contest-ready** with deterministic, verification-focused EDA operations.
+**LLMs may plan, but deterministic tools must execute and verify.**
 
 ---
 
-## Repository structure
+## Why This Project Exists
 
-- `src/app.py` — stdin-driven application shell and top-level request handling
-- `src/protocol.py` — strict response protocol manager
-- `src/schema.py` — tool names, strict JSON schema, and validator
-- `src/ir.py` — internal netlist graph representation
-- `src/parser.py` — restricted gate-level Verilog parser/writer
-- `src/engine.py` — deterministic backend EDA executor
+LLMs are useful for interpreting ambiguous engineering requests, but they should not directly edit RTL, run arbitrary shell commands, or silently produce unverified netlist changes. VeriFlow separates those responsibilities:
+
+- the planner converts an engineer's request into a constrained JSON tool call
+- the validator rejects unsupported or unsafe tool calls
+- the engine performs deterministic netlist analysis and transformations
+- Yosys and ABC provide normalization, optimization, and equivalence-checking support
+- logs and artifacts make each decision inspectable
+
+This makes the project a practical prototype for safe AI-assisted EDA workflows.
+
+---
+
+## Current Capabilities
+
+- Natural-language command handling for netlist analysis and transformations
+- Strict JSON schema validation for all planner output
+- Deterministic fallback planner for offline use without an LLM
+- NVIDIA Nemotron planner adapter for LLM-assisted planning
+- Gemini planner adapter retained as an alternate development option
+- Hybrid Verilog frontend: a name-preserving gate-level parser with Yosys JSON fallback for richer Verilog
+- Internal netlist IR for graph-style analysis
+- Yosys integration for normalization and BLIF export
+- ABC integration for optimization and equivalence checking
+- Configurable verification policy for transformations: `strict`, `permissive`, or `dry_run`
+- Automatic verification and rollback paths for transformations where supported
+- Contest-style `#RESPONSE <id>` / `#END <id>` protocol compatibility
+- Structured debug artifacts under `results/`
+- FastAPI development UI for inspecting requests, tool calls, outputs, and generated Verilog
+- Benchmark runner for collecting frontend, gate-count, depth, fanout, and load-time metrics across sample designs
+- Pytest coverage for protocol, schema validation, config handling, engine behavior, external-tool wrappers, and app smoke tests
+
+---
+
+## Repository Structure
+
+- `src/app.py` - stdin-driven application shell and top-level request handling
+- `src/protocol.py` - response protocol manager and testcase logging
+- `src/schema.py` - tool names, strict JSON schema, and validator
+- `src/ir.py` - internal netlist graph representation
+- `src/parser.py` - gate-level Verilog parser/writer and Yosys JSON-to-IR adapter
+- `src/engine.py` - deterministic backend EDA executor
+- `src/backends/`
+  - `python_graph.py` - lightweight NetlistIR graph analysis
+  - `yosys_backend.py` - Yosys frontend, normalization, cleanup, and export operations
+  - `equivalence.py` - ABC-backed equivalence checking facade
+  - `router.py` - operation-to-backend ownership map
 - `src/planners/`
-  - `base.py` — planner interface
-  - `heuristic.py` — deterministic fallback planner
-  - `gemini.py` — Gemini JSON-planner adapter
-- `src/config.py` — config loader and planner factory
-- `src/external_tools.py` — bounded wrappers for Yosys/ABC
-- `ui_server.py` — development UI server for inspecting requests, tool calls, and artifacts
-- `ui/` — files for the Web UI
-- `tests/` — pytest coverage for the phase 1 scaffold
+  - `base.py` - planner interface
+  - `heuristic.py` - deterministic fallback planner
+  - `gemini.py` - Gemini JSON-planner adapter
+  - `nvidia.py` - NVIDIA NIM/Nemotron JSON-planner adapter
+- `src/config.py` - config loader and planner factory
+- `src/external_tools.py` - bounded wrappers for Yosys and ABC
+- `ui_server.py` - development UI server for inspecting requests, tool calls, and artifacts
+- `ui/` - static files for the browser UI
+- `benchmarks/` - sample Verilog designs and generated benchmark reports
+- `scripts/benchmark.py` - benchmark runner for IR/frontend metrics
+- `tests/` - pytest coverage for the current backend and app behavior
+- `VERIFICATION_REPORT.md` - current verification notes and tested flows
+- `TEST_DESIGNS.md` - documentation for included test circuits
 
 ---
 
@@ -63,19 +93,21 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
+Yosys and ABC are optional for basic development, but recommended for the full verification flow.
+
 ---
 
-## Run tests
+## Run Tests
 
 ```bash
 make test
 ```
 
-This should be the first validation step after cloning or handing over the project.
+Use this as the first validation step after cloning or modifying the project.
 
 ---
 
-## Run the project without LLM
+## Run Without An LLM
 
 ```bash
 python src/app.py --no-llm
@@ -85,21 +117,34 @@ This uses the deterministic heuristic planner only.
 
 ---
 
-## Run the project with Gemini during development
+## Run With NVIDIA Nemotron
 
 Create `config.yaml`:
 
 ```yaml
-provider: "gemini"
+provider: "nvidia"
 
-gemini:
-  api_key: "YOUR_GEMINI_API_KEY"
-  model: "gemini-1.5-flash"
+nvidia:
+  api_key: ""  # leave blank to use NVIDIA_API_KEY
+  base_url: "https://integrate.api.nvidia.com/v1"
+  model: "nvidia/nemotron-3-super-120b-a12b"
+  timeout_sec: 25
 
 generation:
-  temperature: 0.2
+  temperature: 0.0
   max_output_tokens: 1024
+
+verification_policy: "permissive"
 ```
+
+Set your API key with a local `.env` file:
+
+```bash
+cp .env.example .env
+# edit .env and set NVIDIA_API_KEY
+```
+
+`.env` is ignored by git and loaded automatically by the app. A shell environment variable still takes precedence if both are set.
 
 Then run:
 
@@ -112,19 +157,21 @@ Useful flags:
 ```bash
 python src/app.py -config config.yaml --debug
 python src/app.py -config config.yaml --require-llm
+python src/app.py -config config.yaml --verification-policy strict
 python src/app.py --no-llm
 ```
 
-### Planner behavior
+### Planner Behavior
 
-- If Gemini is configured and available, the app uses the Gemini planner.
-- If Gemini is unavailable, missing credentials, or returns invalid output, the app falls back to the heuristic planner unless `--require-llm` is used.
-- Gemini is used **only** as a planner that emits strict JSON tool calls.
-- Gemini does **not** directly edit Verilog or execute shell commands.
+- If NVIDIA is configured and available, the app uses the Nemotron planner through NVIDIA's OpenAI-compatible NIM API.
+- If NVIDIA is unavailable, missing credentials, or returns invalid output, the app falls back to the heuristic planner unless `--require-llm` is used.
+- Nemotron is used only as a planner that emits strict JSON tool calls.
+- Nemotron does not directly edit Verilog or execute shell commands.
+- Gemini is still available by setting `provider: "gemini"` and configuring the `gemini:` block.
 
 ---
 
-## Example stdin session
+## Example Session
 
 ```text
 This is the beginning of testcase case1. Please output a copy of the log into case1.log.
@@ -133,209 +180,173 @@ What is the fanout of n1?
 Write out the current design to out.v.
 ```
 
-The beginning-of-testcase line initializes protocol/log state and should become response 1.
+The beginning-of-testcase line initializes protocol/log state and becomes response 1.
 
 ---
 
-## Current supported tool calls
+## Supported Tool Calls
 
-The current scaffold supports these validated tool calls:
+- `read_netlist` - load a gate-level Verilog netlist
+- `write_netlist` - write the current design to a Verilog file
+- `get_fanout` - get fanout count for a node or net
+- `get_max_depth` - get maximum logic depth between two points
+- `find_path` - find a signal path between source and sink
+- `remove_dangling_logic` - remove unused logic and nets
+- `clean_dangling_and_write` - read an input design, remove dangling logic, and write a cleaned output design
+- `check_external_tools` - check availability of Yosys/ABC tools
+- `normalize_design` - normalize the design using Yosys
+- `check_equivalence` - verify design equivalence using ABC miter flow
+- `check_max_fanout` - check whether the design violates a fanout constraint
+- `insert_and_before_buffers` - insert AND gates before selected buffer instances
+- `replace_gates` - replace selected gate types
+- `optimize_cone` - optimize a logic cone with depth/gate constraints
 
-- `read_netlist` — Load gate-level Verilog netlist
-- `write_netlist` — Write current design to Verilog file
-- `get_fanout` — Get fanout count for a node or net
-- `get_max_depth` — Get maximum logic depth between two points
-- `find_path` — Find signal path between source and sink
-- `remove_dangling_logic` — Remove unused logic and nets
-- `check_external_tools` — Check availability of Yosys/ABC tools
-- `normalize_design` — Normalize design using Yosys (with ABC fallback)
-- `check_equivalence` — Verify design equivalence using ABC miter
-- `check_max_fanout` — Check if design violates max fanout constraint
-- `insert_and_before_buffers` — Insert AND gates before buffer instances
-- `replace_gates` — Replace gate types (e.g., AND → NAND)
-- `optimize_cone` — Optimize logic cone with depth/gate constraints
-
-All transformation tools include automatic normalization and equivalence checking for correctness verification.
-
----
-
-## Implementation Report
-
-A comprehensive LaTeX report documenting all changes made during the 8-step implementation is available:
-
-```bash
-make report  # Requires pdflatex installation
-```
-
-The report (`implementation_report.tex`) contains:
-- Detailed step-by-step implementation documentation
-- Code changes and architectural decisions
-- Testing coverage and results
-- External tool integration details
-- Verification mechanisms and error handling
-- Final system capabilities and handover readiness
-
----
-
-## Testing and Verification
-
-The scaffold includes comprehensive test coverage with 26 passing tests:
-
-```bash
-make test  # Run all tests
-```
-
-Test categories:
-- **Protocol tests** — Response formatting and logging
-- **Schema tests** — JSON validation and error handling
-- **Engine tests** — All transformation tools with verification
-- **External tool tests** — Yosys/ABC availability and mocking
-- **Config tests** — Planner selection and fallback behavior
-- **App smoke tests** — End-to-end request processing
-
-All transformation operations are verified for correctness:
-- Design normalization after changes
-- Equivalence checking against reference design
-- Automatic rollback on verification failure
-- Graceful degradation when external tools unavailable
+Design-changing tools are structured around verification-first execution: store a reference design, apply the transformation, normalize if needed, check equivalence when possible, and reject or roll back unsafe results.
 
 ---
 
 ## External Tool Integration
 
-The scaffold integrates with standard EDA tools:
+VeriFlow uses standard open-source EDA tools behind bounded backend wrappers:
 
-- **Yosys** — Verilog parsing, normalization, BLIF export
-- **ABC** — Logic optimization, equivalence checking, miter verification
+- **Yosys** - Verilog parsing, hierarchy checks, normalization, cleanup, and BLIF export
+- **ABC** - combinational optimization, rewrite/balance passes, and equivalence checking
 
-Tools are automatically detected and gracefully handled when unavailable. All operations include fallbacks to maintain contest compatibility.
+The planner never sees raw shell tools. It emits high-level tool calls, and the deterministic engine decides when to use Python IR logic, Yosys, or ABC.
 
-## Debug artifacts
+### Backend Routing
 
-When running in development, the app writes useful intermediate files under `results/`, including planner and execution artifacts such as:
+VeriFlow is intentionally an orchestration layer, not a replacement for mature EDA engines. The backend router assigns operations to the right execution backend:
 
+- **Python graph backend** - cheap deterministic queries such as fanout, path search, max depth, cone discovery, and metrics
+- **Yosys backend** - Verilog frontend fallback, normalization, cleanup, BLIF export, and unused-logic removal
+- **ABC equivalence backend** - miter/prove checks over BLIF generated by Yosys
+- **Python structural edits** - small controlled edits such as inserting gates or replacing selected primitives, followed by Yosys normalization and equivalence policy checks
+
+This keeps the project focused on safe planning, orchestration, reporting, rollback, and UX while delegating serious EDA algorithms to proven tools.
+
+---
+
+## Development UI
+
+The repository includes a FastAPI-based UI server for inspecting the flow:
+
+```bash
+make run-ui
+```
+
+The UI is useful for:
+
+- sending one request at a time to the backend
+- viewing the planner output and validated tool call
+- inspecting execution summaries and structured data
+- viewing the current generated Verilog
+- browsing artifacts from `results/`
+
+---
+
+## Benchmarks
+
+Run the benchmark suite from the project root:
+
+```bash
+make benchmark
+```
+
+The runner loads every Verilog design under `benchmarks/designs/` through the same engine used by the app and writes:
+
+- `benchmarks/results/summary.json` - structured metrics
+- `benchmarks/results/summary.md` - Markdown table for demos and reports
+
+Current metrics include frontend used, load time, inputs, outputs, gate instances, nets, maximum logic depth, maximum fanout, and fanout-constraint status.
+
+---
+
+## Debug Artifacts
+
+During development, the app writes intermediate artifacts under `results/`, including:
+
+- latest user request
 - raw planner output
+- planner metadata
 - validated tool JSON
-- tool execution output
+- tool execution summary
+- structured tool output data
 - final response text
-- transaction logs
+- validation or execution errors
 
-These artifacts are especially useful when debugging planner behavior or inspecting how a natural-language request was converted into a deterministic tool call.
-
----
-
-## UI server (development/debug use)
-
-The repository also includes a UI server for development and inspection.
-
-Its purpose is to:
-
-- send one request at a time to the backend
-- show the timeline of steps/results
-- surface the current Verilog text
-- expose intermediate artifacts from `results/`
-- keep a placeholder for graph view
-
-This UI is for **development/debugging**, not for contest submission.
+These files make it easier to debug planner behavior and audit how a natural-language request became a deterministic EDA operation.
 
 ---
 
-## Yosys and ABC status
+## Verification Approach
 
-The project already contains thin backend wrappers for **Yosys** and **ABC**.
+The project is designed around a verification-first flow:
 
-### Current role
+```text
+request
+  -> validated operation
+  -> reference design snapshot
+  -> deterministic transformation
+  -> Yosys normalization/export
+  -> ABC equivalence check
+  -> commit or reject
+```
 
-At present, these wrappers are treated as **backend support tools**, not planner-visible raw shell tools.
+Today, equivalence checking is implemented through the open-source EDA stack:
 
-That is intentional.
+1. The reference design and current design are written as temporary Verilog files.
+2. Yosys converts both designs to BLIF.
+3. ABC builds a miter and runs `prove`.
+4. VeriFlow interprets the result as proved, failed, or inconclusive.
 
-The correct long-term design is:
+This means the current checker is structural/Boolean equivalence through Yosys + ABC, not the separate `Verilog-Equivalence-Checking` project. That project would be a strong next backend to integrate behind the same `check_equivalence` API, especially if it provides clearer counterexamples, better Verilog subset support, or a pure-Python fallback when ABC is unavailable.
 
-- the planner emits safe, high-level JSON tool calls
-- the deterministic engine decides when to use Python IR logic, Yosys, or ABC
-- Yosys and ABC remain hidden behind backend bridge classes
+Verification policy controls whether a transformation is committed:
 
-### Intended backbone roles
+- `strict` - commit only when equivalence is explicitly proved
+- `permissive` - commit when equivalence is proved or inconclusive, but reject known failures
+- `dry_run` - analyze the transformation and verification result, then roll back without committing
 
-**Yosys** should become the normalization and preparation layer:
-- read and normalize Verilog
-- perform hierarchy checking
-- run simple cleanup/optimization passes
-- write normalized Verilog
-- export forms needed for ABC
-
-**ABC** should become the verification-first optimization layer:
-- combinational equivalence checking
-- validation after transformations
-- rewrite / balance / optimization passes
-- later, cone-level optimization under hard constraints
-
-### Recommended integration order
-
-1. reliable tool detection (`yosys -V`, `abc -h`)
-2. Yosys normalization flow
-3. ABC equivalence checking
-4. automatic post-transform verification
-5. structural constraint checking
-6. ABC rewrite/balance optimization
-7. cone-level optimization under hard constraints
-
-The key principle is:
-
-**verification first, optimization second**
+Current tests cover protocol handling, schema validation, config fallback behavior, engine operations, external-tool wrappers, and end-to-end app smoke flows. See `VERIFICATION_REPORT.md` and `TEST_DESIGNS.md` for the current verification notes and test circuits.
 
 ---
 
-## What is complete vs incomplete
+## Current Limitations
 
-### Already in place
+The project is an active prototype. The main limitations are:
 
-- deterministic request-processing scaffold
-- planner abstraction and fallback behavior
-- strict validated tool-calling flow
-- basic netlist parsing/writing
-- basic deterministic analysis/transformation support
-- protocol/logging required for contest-style interaction
-- initial Yosys/ABC bridge layer
-
-### Still to be extended
-
-The current project is **not yet contest-complete**. It still needs richer analysis and transformation capabilities such as:
-
-- every-path-through checks
-- matched instance search by naming/pattern
-- cone-size reporting
-- same-clock-domain checks for DFFs
-- transformation tools like replacing matched buffers with AND gates
-- post-edit equivalence verification as a standard step
-- structural hard-constraint checks
-- cone-level and whole-design optimization flows
+- The primary gate-level parser is intentionally restricted; richer Verilog is handled through the Yosys JSON fallback where possible.
+- The Yosys JSON adapter currently targets the project's one-bit gate-level IR; full SystemVerilog, hierarchy, wide buses, and complex sequential designs need broader lowering support.
+- Benchmarks are currently small representative circuits; larger industrial-style suites should be added over time.
+- Equivalence checking currently depends on local Yosys/ABC availability unless another checker backend is added.
+- The UI is currently a development dashboard, not a polished production interface.
 
 ---
 
-## Recommended next phase direction
+## Roadmap
 
-The next development phase should keep the current architecture and make **Yosys + ABC the backbone backend tools**.
+The most important next improvements are:
 
-The intended backend workflow is:
-
-**request → engine decides operation → transform if needed → Yosys normalize → ABC verify → structural checks → commit/reject → respond**
-
-That preserves the current deterministic design while making the backend strong enough for contest-style transformation and optimization tasks.
+1. Extend the Yosys JSON frontend to support wider buses, hierarchy flattening policies, richer sequential cells, and alias-preserving net metadata.
+2. Add a benchmark suite with gate-count, depth, fanout, runtime, and equivalence metrics.
+3. Add a pluggable equivalence backend interface so Yosys/ABC and the standalone Verilog equivalence checker can be selected by config.
+4. Upgrade the UI into a netlist transformation dashboard with graph visualization and before/after diffs.
+5. Add REST endpoints for loading designs, submitting commands, querying metrics, and exporting reports.
+6. Add CI that runs tests, linting, and sample transformations.
+7. Package the full environment with Docker or a devcontainer, including Yosys and ABC.
 
 ---
 
-## Summary
+## Project Positioning
 
-This repository should be understood as a **working deterministic scaffold** for ICCAD 2026 Problem A.
+VeriFlow demonstrates a practical architecture for AI-assisted hardware design automation:
 
-It already provides:
-- the contest interaction shell
-- the planner/validator/engine pipeline
-- the current supported tools
-- the debug/dev workflow
-- the initial Yosys/ABC bridge layer
+- LLM-safe tool calling
+- deterministic EDA execution
+- gate-level Verilog analysis
+- formal-equivalence-oriented verification
+- inspectable logs and artifacts
+- extensible backend wrappers for industry-standard EDA tools
 
-The next stage is to turn **Yosys into the normalization/export layer** and **ABC into the verification-first optimization layer**, while preserving the current JSON-tool architecture.
-
+The project is suitable for showcasing work at the intersection of EDA, digital design automation, Python backend systems, and safe AI tooling.
